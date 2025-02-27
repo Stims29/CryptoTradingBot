@@ -75,6 +75,10 @@ class ScalpingTest:
             
             bot.position_manager = PositionManager(simulation_mode=True, initial_capital=self.initial_capital)
             bot.position_manager.logger = self.bot_logger
+            bot.strategy = HybridStrategy()
+
+            # Donner accès à la stratégie depuis le position_manager
+            bot.position_manager.strategy = bot.strategy
             
             bot.order_manager = OrderManager(simulation_mode=True,)
             bot.order_manager.logger = self.bot_logger
@@ -406,7 +410,7 @@ async def main():
     try:
         # Configuration des paramètres
         duration_minutes = 15  
-        initial_capital = 10.0
+        initial_capital = 1.0 # Limiter à 1€ seulement
         
         # Exécution test
         test = ScalpingTest(duration_minutes, initial_capital)

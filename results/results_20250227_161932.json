@@ -1,0 +1,29 @@
+{
+  "test_info": {
+    "session_id": "20250227_161932",
+    "duration": "0:15:02.044834",
+    "start_time": "2025-02-27T16:19:32.089019",
+    "end_time": "2025-02-27T16:34:34.135804",
+    "initial_capital": 1.0
+  },
+  "performance": {
+    "final_capital": 1.0,
+    "total_pnl": 0.0,
+    "total_trades": 0,
+    "win_rate": 0.0,
+    "max_drawdown": 0.0,
+    "sharpe_ratio": 0
+  },
+  "signals": {
+    "generated": 0,
+    "executed": 0,
+    "rejected": 0,
+    "errors": 0
+  },
+  "strategy_breakdown": {
+    "BREAKOUT": 0,
+    "MEAN_REVERSION": 0,
+    "MOMENTUM": 0,
+    "ORDER_BOOK": 0
+  }
+}

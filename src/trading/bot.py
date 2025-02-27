@@ -408,12 +408,12 @@ class TradingBot:
                                         "EMERGENCY_BRAKE_ACTIVE")
                 return False
             
-            # Si suspension des signaux est active
-            if hasattr(self, '_signal_suspension_until') and datetime.now() < self._signal_suspension_until:
+            # Vérifier l'arrêt critique
+            if hasattr(self, '_critical_stop') and self._critical_stop():
                 self.log_signal_rejection(signal.get('symbol', 'unknown'), 
                                         signal.get('metrics', {}).get('price', 'unknown'), 
                                         signal.get('indicators', {}), 
-                                        "SIGNAL_GENERATION_SUSPENDED")
+                                        "CRITICAL_STOP_ACTIVE")
                 return False
         
             # Log du signal reçu
@@ -495,7 +495,8 @@ class TradingBot:
                         side=signal.get('action'),
                         size=position_size,
                         entry_price=current_price,
-                        market_type=market_type
+                        market_type=market_type,
+                        strategy=signal.get('strategy')
                     )
            
                     if position_opened:
@@ -739,6 +740,18 @@ class TradingBot:
         except Exception as e:
             self.logger.error(f"Erreur vérification frein d'urgence: {e}")
             return True  # En cas de doute, activer le frein
+        
+    def _critical_stop(self):
+        """Arrête tout trading après X pertes consécutives"""
+        if len(self.position_manager.position_history) >= 3:
+            # Si les 3 dernières positions sont perdantes
+            last_positions = self.position_manager.position_history[-3:]
+            if all(p['realized_pnl'] < 0 for p in last_positions):
+                self.logger.critical("ARRÊT CRITIQUE: 3 pertes consécutives")
+                self._emergency_brake_activated = True
+                self._signal_suspension_until = datetime.now() + timedelta(hours=1)
+                return True
+        return False
 
     def _cleanup_processed_signals(self):
         """Nettoie les signaux traités avec une fenêtre plus appropriée."""

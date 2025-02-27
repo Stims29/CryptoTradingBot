@@ -274,37 +274,21 @@ class HybridStrategy:
         """Génère un signal de trading avec correction d'erreur d'unpacking."""
         try:
             self.logger.info(f"[DEBUG] Entrée generate_signal pour {symbol}")
+        
+            # Vérifications préliminaires sur les données
             if market_data is None or market_data.empty:
-                self.logger.error(f"Données marché invalides pour {symbol}")
+                self.logger.warning(f"Données de marché vides pour {symbol}")
                 return None
-                
+            
             self.logger.info(f"[DEBUG] Market Data Shape: {market_data.shape}")
             self.logger.info(f"[DEBUG] Tech Analysis Keys: {list(tech_analysis.keys())}")
-            
-            # Vérifier si on doit traiter ce signal
-            now = datetime.now()
-            should_process, rejection_reason = self._should_process_signal(symbol, now)
-            if not should_process:
-                self.logger.info(f"Signal {symbol} ignoré: {rejection_reason}")
-                self.metrics.rejected += 1
-                return None
-            
-            # Calcul des indicateurs techniques avec log
-            indicators = self._calculate_indicators(market_data)
-            
-            # Déterminer les poids adaptatifs
-            weights = self._calculate_adaptive_weights(market_data, tech_analysis)
-            
-            # Analyse des différentes stratégies avec log
-            breakout_score = self._analyze_breakout(market_data, tech_analysis) * weights['BREAKOUT']
-            mean_reversion_score = self._analyze_mean_reversion(market_data, tech_analysis) * weights['MEAN_REVERSION']
-            momentum_score = self._analyze_momentum(market_data, tech_analysis) * weights['MOMENTUM']
-            order_book_score = self._analyze_orderbook(tech_analysis) * weights['ORDER_BOOK']
-            
-            # Log des scores
-            if self._should_log('high'):
-                self.logger.info(f"Scores {symbol}: BREAKOUT={breakout_score:.4f}, MEAN_REVERSION={mean_reversion_score:.4f}, MOMENTUM={momentum_score:.4f}, ORDER_BOOK={order_book_score:.4f}")
-            
+        
+            # Calcul des scores pour chaque stratégie
+            breakout_score = self._analyze_breakout(market_data, tech_analysis)
+            mean_reversion_score = self._analyze_mean_reversion(market_data, tech_analysis)
+            momentum_score = self._analyze_momentum(market_data, tech_analysis)
+            order_book_score = self._analyze_orderbook(tech_analysis)
+        
             # Combinaison des scores
             scores = {
                 'BREAKOUT': breakout_score,
@@ -312,56 +296,83 @@ class HybridStrategy:
                 'MOMENTUM': momentum_score,
                 'ORDER_BOOK': order_book_score
             }
-            
+        
             # Stratégie dominante
-            dominant_strategy = max(scores, key=scores.get) if any(abs(score) > 0 for score in scores.values()) else 'NONE'
-            composite_score = scores[dominant_strategy] if dominant_strategy != 'NONE' else 0
-            
-            # Log du score composite
+            dominant_strategy = max(scores, key=scores.get)
+            composite_score = scores[dominant_strategy]
+        
+            # Log des scores
+            self.logger.info(f"Scores {symbol}: BREAKOUT={breakout_score:.4f}, MEAN_REVERSION={mean_reversion_score:.4f}, MOMENTUM={momentum_score:.4f}, ORDER_BOOK={order_book_score:.4f}")
             self.logger.info(f"Score composite {symbol}: {composite_score:.4f} ({dominant_strategy})")
-            
-            # Validation du signal avec seuils très permissifs pour diagnostic
-            valid, reason = self._validate_signal(composite_score, tech_analysis, indicators)
-            
+        
+            # Validation du signal avec seuils
+            valid, reason = self._validate_signal(composite_score, tech_analysis, None)
+        
+            # Vérification supplémentaire de la performance historique de la stratégie
+            if valid and not self._validate_strategy_performance(dominant_strategy):
+                valid = False
+                reason = f"Stratégie {dominant_strategy} a un mauvais historique récent"
+        
             if not valid:
                 self.logger.info(f"Signal {symbol} rejeté: {reason}")
-                self.metrics.rejected += 1
                 return None
                 
             # Déterminer l'action (buy/sell)
             action = 'buy' if composite_score > 0 else 'sell'
-            
+        
             # Construction du signal
             signal = {
                 'symbol': symbol,
                 'action': action,
                 'strategy': dominant_strategy,
                 'strength': abs(composite_score),
-                'timestamp': now,
+                'timestamp': datetime.now(),
                 'metrics': {
                     'price': float(market_data['close'].iloc[-1]),
                     'volume': tech_analysis.get('volume_profile', {}).get('volume_24h', 0),
                     'volatility': tech_analysis.get('volatility', 0),
                     'spread': tech_analysis.get('spread', 0.001)
                 },
-                'indicators': indicators
+                'indicators': self._calculate_indicators(market_data) if hasattr(self, '_calculate_indicators') else {}
             }
-            
-            # Mise à jour des métriques
-            self.metrics.generated += 1
-            self.metrics.strategy_signals[dominant_strategy] += 1
-            
-            # Enregistrement du signal
-            self.last_signals[symbol] = now
-            
+        
+            # Log de confirmation
             self.logger.info(f"Signal généré pour {symbol}: {action} - force: {abs(composite_score):.4f}")
-            
+        
             return signal
             
         except Exception as e:
             self.logger.error(f"Erreur génération signal: {str(e)}")
-            self.metrics.errors += 1
             return None
+        
+    def _validate_strategy_performance(self, strategy: str) -> bool:
+        """Vérifie si une stratégie a un historique positif récent"""
+        if not hasattr(self, 'strategy_performance'):
+            self.strategy_performance = {s: {'win': 0, 'loss': 0} for s in ['BREAKOUT', 'MEAN_REVERSION', 'MOMENTUM', 'ORDER_BOOK']}
+            return True
+        
+        # Si la stratégie a plus de pertes que de gains
+        if self.strategy_performance[strategy]['loss'] > self.strategy_performance[strategy]['win'] * 2:
+            # Exiger un signal beaucoup plus fort
+            return False
+        
+        return True
+    
+    def update_strategy_performance(self, strategy: str, is_win: bool):
+        """Met à jour les statistiques de performance d'une stratégie en mode simulation."""
+        # Initialiser le dictionnaire de performance si nécessaire
+        if not hasattr(self, 'strategy_performance'):
+            self.strategy_performance = {s: {'win': 0, 'loss': 0} for s in ['BREAKOUT', 'MEAN_REVERSION', 'MOMENTUM', 'ORDER_BOOK']}
+    
+        # Mettre à jour les stats pour cette stratégie
+        if strategy in self.strategy_performance:
+            if is_win:
+                self.strategy_performance[strategy]['win'] += 1
+            else:
+                self.strategy_performance[strategy]['loss'] += 1
+            
+        # Log des performances actualisées
+        self.logger.info(f"Performance stratégie {strategy} mise à jour: {self.strategy_performance[strategy]}")
 
     def _should_process_signal(self, symbol: str, now: datetime) -> Tuple[bool, str]:
         """Vérifie si un signal doit être traité avec cooldown optimisé."""
@@ -469,6 +480,19 @@ class HybridStrategy:
         except Exception as e:
             self.logger.error(f"Erreur validation signal: {str(e)}")
             return False, f"Erreur validation: {str(e)}"
+        
+    def _validate_strategy_performance(self, strategy: str) -> bool:
+        """Vérifie si une stratégie a un historique positif récent"""
+        if not hasattr(self, 'strategy_performance'):
+            self.strategy_performance = {s: {'win': 0, 'loss': 0} for s in ['BREAKOUT', 'MEAN_REVERSION', 'MOMENTUM', 'ORDER_BOOK']}
+            return True
+        
+        # Si la stratégie a plus de pertes que de gains
+        if self.strategy_performance[strategy]['loss'] > self.strategy_performance[strategy]['win'] * 2:
+            # Exiger un signal beaucoup plus fort
+            return False
+        
+        return True
 
     def _calculate_adaptive_weights(self, data: pd.DataFrame, tech_analysis: Dict) -> Dict[str, float]:
         """

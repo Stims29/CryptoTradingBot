@@ -36,10 +36,10 @@ class PositionManager:
         # Configuration par type de marché
         self.market_configs = {
             'MAJOR': {
-                'stop_loss': 0.0015,    # Réduire de 0.002 à 0.0015 (0.15%)
-                'take_profit': 0.005,   # Réduire de 0.006 à 0.005 (0.5%)
-                'trailing_stop': 0.002,  # Réduire de 0.003 à 0.002 (0.2%)
-                'position_max': 0.02    # Réduit de 0.03 à 0.02 (2% du capital)
+                'stop_loss': 0.001,      # 0.1%
+                'take_profit': 0.003,    # 0.3%
+                'trailing_stop': 0.0005, # 0.05%
+                'position_max': 0.01     # 1% du capital seulement
             },
             'ALTCOINS': {
                 'stop_loss': 0.006,    # Augmenter de 0.0025 à 0.006 (0.6%)
@@ -350,7 +350,7 @@ class PositionManager:
             if symbol not in self.positions:
                 self.logger.warning(f"Position inexistante pour fermeture: {symbol}")
                 return 0.0
-            
+                
             position = self.positions[symbol]
         
             # Calculer le PnL réalisé
@@ -360,9 +360,10 @@ class PositionManager:
                 pnl = (position['entry_price'] - exit_price) * position['size']
         
             # Protection contre les PnL irréalistes
-            if abs(pnl) > self.initial_capital * 0.5:  # Si le PnL dépasse 50% du capital initial
-                self.logger.warning(f"PnL anormal détecté pour {symbol}: {pnl:.2f}€. Limité à 10% du capital initial.")
-                pnl = self.initial_capital * 0.1 * (1 if pnl > 0 else -1)  # Limiter à ±10% du capital
+            if hasattr(self, 'initial_capital') and self.initial_capital > 0:
+                if abs(pnl) > self.initial_capital * 0.5:  # Si le PnL dépasse 50% du capital initial
+                    self.logger.warning(f"PnL anormal détecté pour {symbol}: {pnl:.2f}€. Limité à 10% du capital initial.")
+                    pnl = self.initial_capital * 0.1 * (1 if pnl > 0 else -1)  # Limiter à ±10% du capital
             
             # Mise à jour position
             position['status'] = 'closed'
@@ -375,19 +376,29 @@ class PositionManager:
             duration = (position['exit_time'] - position['entry_time']).total_seconds()
             position['duration'] = duration
         
+            # Récupération de la stratégie utilisée
+            strategy = position.get('strategy')
+        
+            # Mise à jour des performances de la stratégie si possible
+            if strategy and hasattr(self, 'bot') and hasattr(self.bot, 'strategy'):
+                is_win = pnl > 0
+                self.bot.strategy.update_strategy_performance(strategy, is_win)
+        
             # Mettre à jour statistiques
             if pnl > 0:
                 self.position_stats['win_count'] += 1
                 self.position_stats['avg_win'] = ((self.position_stats['avg_win'] * (self.position_stats['win_count'] - 1)) + pnl) / self.position_stats['win_count'] if self.position_stats['win_count'] > 0 else pnl
                 self.position_stats['max_win'] = max(self.position_stats['max_win'], pnl)
+
                 # Mettre à jour le meilleur trade
-                self.metrics['best_trade'] = max(self.metrics['best_trade'], pnl)
+                self.metrics['best_trade'] = max(self.metrics.get('best_trade', 0), pnl)
             else:
                 self.position_stats['loss_count'] += 1
                 self.position_stats['avg_loss'] = ((self.position_stats['avg_loss'] * (self.position_stats['loss_count'] - 1)) + pnl) / self.position_stats['loss_count'] if self.position_stats['loss_count'] > 0 else pnl
                 self.position_stats['max_loss'] = min(self.position_stats['max_loss'], pnl)
+
                 # Mettre à jour le pire trade
-                self.metrics['worst_trade'] = min(self.metrics['worst_trade'], pnl)
+                self.metrics['worst_trade'] = min(self.metrics.get('worst_trade', 0), pnl)
             
             self.position_stats['total_duration'] += duration
             self.position_stats['position_count'] += 1
