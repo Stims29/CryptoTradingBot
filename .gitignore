@@ -1,5 +1,4 @@
 __pycache__/
-*.py[cod]
 *$py.class
 *.so
 .Python
@@ -23,3 +22,7 @@ MANIFEST
 logs/
 .venv_new/
 run_simulation_jan2025.py
+metrics_*.json
+metrics_*.csv
+result_*.json
+*.log
