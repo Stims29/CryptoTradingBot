@@ -1,0 +1,27 @@
+{
+    "test_duration_hours": 24,
+    "initial_capital": 100.0,
+    "configurations": {
+        "conservative": {
+            "risk_per_trade": 0.01,
+            "max_trades_per_hour": 200,
+            "max_exposure": 0.1,
+            "min_trade_amount": 0.5,
+            "max_trade_amount": 1.0
+        },
+        "balanced": {
+            "risk_per_trade": 0.015,
+            "max_trades_per_hour": 250,
+            "max_exposure": 0.15,
+            "min_trade_amount": 0.5,
+            "max_trade_amount": 1.5
+        },
+        "aggressive": {
+            "risk_per_trade": 0.02,
+            "max_trades_per_hour": 300,
+            "max_exposure": 0.2,
+            "min_trade_amount": 0.5,
+            "max_trade_amount": 2.0
+        }
+    }
+}

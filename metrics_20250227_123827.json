@@ -1,0 +1,52 @@
+{
+  "current_capital": 8.794920309361014,
+  "total_pnl": -1.2050796906389858,
+  "win_rate": 0.0,
+  "max_drawdown": 0.12050796906389856,
+  "trades": 5,
+  "signals": {
+    "generated": 142,
+    "executed": 5,
+    "rejected": 173
+  },
+  "rejection_details": {
+    "RISK_MANAGER_REJECTION: Intervalle min non respect\u00e9: 0.03s": 1,
+    "EMERGENCY_BRAKE_ACTIVE": 136,
+    "STRATEGY_NO_SIGNAL": 36
+  },
+  "position_metrics": {
+    "total_pnl": -1.2050796906389858,
+    "realized_pnl": -1.2050796906389858,
+    "unrealized_pnl": 0.0,
+    "active_positions": 0,
+    "closed_positions": 5,
+    "opened_positions": 5,
+    "win_rate": 0.0,
+    "current_drawdown": 0.0,
+    "max_drawdown": 0.0,
+    "avg_position_duration": 0.0021485999999999996,
+    "sharpe_ratio": 0.0,
+    "best_trade": 0.0,
+    "worst_trade": -0.2483172524604139
+  },
+  "strategy_metrics": {
+    "generated": 142,
+    "filtered": 0,
+    "executed": 5,
+    "rejected": 36,
+    "errors": 0,
+    "strategy_breakdown": {
+      "BREAKOUT": 99,
+      "MEAN_REVERSION": 36,
+      "MOMENTUM": 6,
+      "ORDER_BOOK": 1
+    }
+  },
+  "session_info": {
+    "end_time": "2025-02-27T12:38:27.781287",
+    "initial_capital": 10.0,
+    "symbols": [
+      "BTC/USDT"
+    ]
+  }
+}
