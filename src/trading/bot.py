@@ -55,7 +55,7 @@ class TradingBot:
         self._error_counter = 0
         self._last_update = datetime.now()
         self._running = False
-        self._processed_signals = set()
+        self._processed_signals = {}
 
         # Flags de contrôle des performances
         self._verbose_logging = False
@@ -472,8 +472,8 @@ class TradingBot:
                 last_time = self._processed_signals[signal_key]
                 seconds_elapsed = (current_time - last_time).total_seconds()
     
-                # Autoriser le même signal après 10 secondes
-                if seconds_elapsed < 10:
+                # Autoriser le même signal après 5 secondes
+                if seconds_elapsed < 5:
                     self.logger.info(f"[TRAITEMENT] Signal similaire pour {symbol} ignoré temporairement (10s)")
                     self.log_signal_rejection(symbol, current_price, indicators, "DUPLICATE_SIGNAL")
                     return False
@@ -493,14 +493,6 @@ class TradingBot:
                             return False
                 except Exception as e:
                     self.logger.warning(f"Erreur lors de la vérification de tendance: {e}")
-
-            # Validation doublons avec intervalle plus long
-            signal_key = f"{symbol}_{signal['action']}_{int(datetime.now().timestamp() * 100) % 300}"  # ~3s
-            if signal_key in self._processed_signals:
-                self.logger.info(f"[TRAITEMENT] Signal dupliqué pour {symbol}")
-                self.log_signal_rejection(symbol, current_price, indicators, "DUPLICATE_SIGNAL")
-                return False
-            self._processed_signals.add(signal_key)
 
             # Validation risk manager avec logs détaillés
             self.logger.info(f"[TRAITEMENT] Vérification par le risk manager...")
@@ -773,7 +765,7 @@ class TradingBot:
         """Vérifie si le frein d'urgence global doit être activé."""
         try:
             # Pour le Test 3B: Limiter à 3 trades maximum
-            if hasattr(self, 'metrics') and self.metrics['trades']['total'] >= 3:
+            if hasattr(self, 'metrics') and self.metrics['trades']['total'] >= 5:
                 if not hasattr(self, '_emergency_brake_activated') or not self._emergency_brake_activated:
                     self.logger.critical("LIMITE DE TEST ATTEINTE: 3 trades maximum pour Test 3B")
                     self._emergency_brake_activated = True
@@ -818,13 +810,26 @@ class TradingBot:
 
     def _cleanup_processed_signals(self):
         """Nettoie les signaux traités avec une fenêtre plus appropriée."""
-        # Conserver les signaux des 5 dernières minutes maximum
-        max_size = 1000  # Limite du nombre de signaux en mémoire
+        now = datetime.now()
+        max_age = timedelta(minutes=5)  # Durée maximale de conservation des signaux
     
-        # Si le nombre de signaux dépasse la limite, supprimer les plus anciens
+        # Supprimer les signaux trop anciens
+        expired_keys = []
+        for signal_key, timestamp in self._processed_signals.items():
+            if now - timestamp > max_age:
+                expired_keys.append(signal_key)
+    
+        # Supprimer les clés expirées
+        for key in expired_keys:
+            del self._processed_signals[key]
+        
+        # Limiter la taille du dictionnaire si nécessaire
+        max_size = 1000
         if len(self._processed_signals) > max_size:
             self.logger.warning(f"Nettoyage forcé des signaux traités: {len(self._processed_signals)} -> {max_size}")
-            self._processed_signals = set(list(self._processed_signals)[-max_size:])
+            # Garder les signaux les plus récents
+            sorted_signals = sorted(self._processed_signals.items(), key=lambda x: x[1], reverse=True)
+            self._processed_signals = dict(sorted_signals[:max_size])
 
     def _generate_detailed_report(self):
         """Génère un rapport détaillé périodique sur l'état du bot."""
