@@ -657,7 +657,7 @@ class TradingBot:
                         symbol=position["symbol"], interval="1m", limit=1
                     )
 
-                    if not market_data is None and not market_data.empty:
+                    if market_data is not None and not market_data.empty:
                         current_price = market_data["close"].iloc[-1]
 
                         # Mise à jour position
@@ -670,16 +670,30 @@ class TradingBot:
 
                         # Si la position a été fermée avec un PnL
                         if pnl != 0:
+                            # Log avant modification du capital
+                            old_capital = self.current_capital
+                            old_total_pnl = self.metrics['performance']['total_pnl']
+                       
+                            # Métriques détaillées AVANT la mise à jour
+                            self.logger.info(f"Métriques AVANT mise à jour - Capital: {old_capital:.4f}€, PnL total: {old_total_pnl:.4f}€")
+                       
+                            # Mise à jour du capital et peak_capital
                             self.current_capital += pnl
-                            self.peak_capital = max(
-                                self.current_capital, self.peak_capital
-                            )
+                            self.peak_capital = max(self.current_capital, self.peak_capital)
                             self._update_drawdown()
+                       
+                            # Mise à jour explicite du PnL total
+                            self.metrics['performance']['total_pnl'] += pnl
 
-                            self.logger.info(f"Position fermée: {position['symbol']}, PnL: {pnl:.4f}€")
-                            # Métriques détaillées pour le debug
-                            self.logger.info(f"Métriques avant mise à jour - Capital: {self.current_capital:.4f}€, PnL total: {self.metrics['performance']['total_pnl']:.4f}€")
-    
+                            # Log détaillé APRÈS la transaction
+                            self.logger.info(f"Position fermée: {position['symbol']}, Entry: {position.get('entry_price', 'N/A')}, Exit: {current_price}, PnL: {pnl:.4f}€")
+                            self.logger.info(f"Capital APRÈS mise à jour: {old_capital:.4f}€ -> {self.current_capital:.4f}€")
+                            self.logger.info(f"Performance totale APRÈS mise à jour: {old_total_pnl:.4f}€ -> {self.metrics['performance']['total_pnl']:.4f}€")
+                       
+                            # Vérification des métriques du position_manager
+                            if hasattr(self.position_manager, "get_metrics"):
+                                pm_metrics = self.position_manager.get_metrics()
+                                self.logger.info(f"Position manager metrics - total_pnl: {pm_metrics.get('total_pnl', 0.0)}")
 
                             # Mise à jour des métriques
                             if pnl > 0:
@@ -689,8 +703,10 @@ class TradingBot:
 
                 except Exception as e:
                     self.logger.error(
-                        f"Erreur mise à jour position {position['symbol']}: {e}"
+                        f"Erreur mise à jour position {position.get('symbol', 'unknown')}: {e}"
                     )
+                    import traceback
+                    self.logger.error(traceback.format_exc())
 
             # Vérification des timeouts et fermeture des positions expirées
             if hasattr(self.position_manager, "check_positions_timeout"):
@@ -698,6 +714,8 @@ class TradingBot:
 
         except Exception as e:
             self.logger.error(f"Erreur mise à jour positions: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 
     def _update_metrics(self):
         """Met à jour les métriques de trading."""
