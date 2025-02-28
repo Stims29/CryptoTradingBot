@@ -273,22 +273,59 @@ class HybridStrategy:
     async def generate_signal(self, symbol: str, market_data: pd.DataFrame, tech_analysis: Dict) -> Optional[Dict]:
         """Génère un signal de trading avec correction d'erreur d'unpacking."""
         try:
-            self.logger.info(f"[DEBUG] Entrée generate_signal pour {symbol}")
-        
-            # Vérifications préliminaires sur les données
+            # Vérifications préliminaires renforcées
+            self.logger.info(f"Début génération signal pour {symbol}")
+       
             if market_data is None or market_data.empty:
-                self.logger.warning(f"Données de marché vides pour {symbol}")
+                self.logger.warning(f"Données market_data invalides pour {symbol}")
                 return None
-            
-            self.logger.info(f"[DEBUG] Market Data Shape: {market_data.shape}")
-            self.logger.info(f"[DEBUG] Tech Analysis Keys: {list(tech_analysis.keys())}")
-        
-            # Calcul des scores pour chaque stratégie
-            breakout_score = self._analyze_breakout(market_data, tech_analysis)
-            mean_reversion_score = self._analyze_mean_reversion(market_data, tech_analysis)
-            momentum_score = self._analyze_momentum(market_data, tech_analysis)
-            order_book_score = self._analyze_orderbook(tech_analysis)
-        
+           
+            # Vérification explicite de tech_analysis
+            if not tech_analysis:
+                self.logger.warning(f"Analyse technique vide pour {symbol}")
+                return None
+           
+            # Vérification des clés requises
+            required_keys = ['volatility', 'volume_profile', 'price_levels']
+            missing_keys = [k for k in required_keys if k not in tech_analysis]
+            if missing_keys:
+                self.logger.warning(f"Analyse technique incomplète pour {symbol}, clés manquantes: {missing_keys}")
+                return None
+       
+            # Vérification du retour de _should_process_signal
+            should_process_result = self._should_process_signal(symbol, datetime.now())
+       
+            # Si le résultat est un tuple, extraire les valeurs
+            if isinstance(should_process_result, tuple) and len(should_process_result) == 2:
+                should_process, rejection_reason = should_process_result
+            else:
+                # Sinon considérer comme booléen
+                should_process = bool(should_process_result)
+                rejection_reason = "Raison inconnue" if not should_process else ""
+       
+            if not should_process:
+                self.logger.info(f"Signal {symbol} ignoré: {rejection_reason}")
+                self.metrics.rejected += 1
+                return None
+       
+            # Calcul des indicateurs techniques
+            self.logger.info(f"Calcul indicateurs pour {symbol}")
+            indicators = self._calculate_indicators(market_data)
+            self.logger.info(f"Indicateurs {symbol} calculés: RSI={indicators.get('rsi', 'N/A')}, MACD={indicators.get('macd', 'N/A')}")
+       
+            # Déterminer les poids adaptatifs
+            weights = self._calculate_adaptive_weights(market_data, tech_analysis)
+            self.logger.info(f"Poids adaptatifs {symbol}: {weights}")
+       
+            # Analyse des différentes stratégies
+            breakout_score = self._analyze_breakout(market_data, tech_analysis) * weights['BREAKOUT']
+            mean_reversion_score = self._analyze_mean_reversion(market_data, tech_analysis) * weights['MEAN_REVERSION']
+            momentum_score = self._analyze_momentum(market_data, tech_analysis) * weights['MOMENTUM']
+            order_book_score = self._analyze_orderbook(tech_analysis) * weights['ORDER_BOOK']
+       
+            # Log des scores
+            self.logger.info(f"Scores {symbol}: BREAKOUT={breakout_score:.4f}, MEAN_REVERSION={mean_reversion_score:.4f}, MOMENTUM={momentum_score:.4f}, ORDER_BOOK={order_book_score:.4f}")
+       
             # Combinaison des scores
             scores = {
                 'BREAKOUT': breakout_score,
@@ -296,30 +333,25 @@ class HybridStrategy:
                 'MOMENTUM': momentum_score,
                 'ORDER_BOOK': order_book_score
             }
-        
+       
             # Stratégie dominante
             dominant_strategy = max(scores, key=scores.get)
             composite_score = scores[dominant_strategy]
-        
-            # Log des scores
-            self.logger.info(f"Scores {symbol}: BREAKOUT={breakout_score:.4f}, MEAN_REVERSION={mean_reversion_score:.4f}, MOMENTUM={momentum_score:.4f}, ORDER_BOOK={order_book_score:.4f}")
+       
+            # Log du score composite
             self.logger.info(f"Score composite {symbol}: {composite_score:.4f} ({dominant_strategy})")
-        
-            # Validation du signal avec seuils
-            valid, reason = self._validate_signal(composite_score, tech_analysis, None)
-        
-            # Vérification supplémentaire de la performance historique de la stratégie
-            if valid and not self._validate_strategy_performance(dominant_strategy):
-                valid = False
-                reason = f"Stratégie {dominant_strategy} a un mauvais historique récent"
-        
+       
+            # Validation du signal
+            valid, reason = self._validate_signal(composite_score, tech_analysis, indicators)
+       
             if not valid:
                 self.logger.info(f"Signal {symbol} rejeté: {reason}")
+                self.metrics.rejected += 1
                 return None
-                
+           
             # Déterminer l'action (buy/sell)
             action = 'buy' if composite_score > 0 else 'sell'
-        
+       
             # Construction du signal
             signal = {
                 'symbol': symbol,
@@ -333,16 +365,25 @@ class HybridStrategy:
                     'volatility': tech_analysis.get('volatility', 0),
                     'spread': tech_analysis.get('spread', 0.001)
                 },
-                'indicators': self._calculate_indicators(market_data) if hasattr(self, '_calculate_indicators') else {}
+                'indicators': indicators
             }
-        
-            # Log de confirmation
+       
+            # Mise à jour des métriques
+            self.metrics.generated += 1
+            self.metrics.strategy_signals[dominant_strategy] += 1
+       
+            # Enregistrement du signal
+            self.last_signals[symbol] = datetime.now()
+       
             self.logger.info(f"Signal généré pour {symbol}: {action} - force: {abs(composite_score):.4f}")
-        
+       
             return signal
-            
+       
         except Exception as e:
             self.logger.error(f"Erreur génération signal: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            self.metrics.errors += 1
             return None
         
     def _validate_strategy_performance(self, strategy: str) -> bool:

@@ -285,57 +285,84 @@ class TradingBot:
             # Délai minimal entre analyses du même symbole (5 secondes)
             symbol_key = f"last_analysis_{symbol}"
             now = datetime.now()
-        
+   
             if hasattr(self, symbol_key):
                 last_analysis = getattr(self, symbol_key)
                 if (now - last_analysis).total_seconds() < 5:
                     return  # Ignorer l'analyse si moins de 5 secondes écoulées
-                
+           
             setattr(self, symbol_key, now)
-        
+   
             self.logger.info(f"Début analyse marché pour {symbol}")
-            market_data = await self.market_data.get_market_data(symbol)
-            self.logger.info(f"Données reçues: {market_data is not None}")
+       
+            # Récupération des données avec gestion d'erreur dédiée
+            try:
+                market_data = await self.market_data.get_market_data(symbol)
+                self.logger.info(f"Données reçues pour {symbol}: {market_data is not None and not market_data.empty}")
+           
+                if market_data is None or market_data.empty:
+                    self.logger.warning(f"Données de marché vides ou invalides pour {symbol}")
+                    return
+            except Exception as data_error:
+                self.logger.error(f"Erreur récupération données {symbol}: {data_error}")
+                return
 
             # Ajout de logging détaillé
-            if market_data is not None and not market_data.empty:
+            try:
                 tech_analysis = await self._compute_technical_analysis(market_data)
-            
+           
+                if not tech_analysis:
+                    self.logger.warning(f"Analyse technique vide pour {symbol}")
+                    return
+               
                 self.logger.info(
                     f"Analyse {symbol} - Prix: {market_data['close'].iloc[-1]}, "
                     f"Vol: {market_data['volume'].iloc[-1]}, "
                     f"RSI: {tech_analysis.get('rsi', 'N/A')}"
                 )
 
-                signal = await self.strategy.generate_signal(
-                    symbol, market_data, tech_analysis
-                )
-            
-                if signal:
-                    self.logger.warning(
-                        f"TRAITEMENT DU SIGNAL: {symbol}, {signal.get('action')}, force={signal.get('strength')}"
-                    )
-                    # Incrémentation du compteur de signaux générés
-                    self.metrics["market_analysis"]["signals_generated"] += 1
-                    # Traitement du signal
-                    result = await self._process_trading_signal(signal)
-                    self.logger.warning(
-                        f"RÉSULTAT TRAITEMENT: {symbol}, success={result}"
-                    )
-                else:
-                    # Signal non généré par la stratégie
-                    current_price = (
-                        market_data["close"].iloc[-1] if not market_data.empty else None
-                    )
-                    indicators = {
-                        "rsi": tech_analysis.get("rsi", "N/A"),
-                        "macd": tech_analysis.get("macd", "N/A"),
-                        "volatility": tech_analysis.get("volatility", "N/A"),
-                    }
-                    self.logger.info(f"Aucun signal généré pour {symbol}")
-                    self.log_signal_rejection(
-                        symbol, current_price, indicators, "STRATEGY_NO_SIGNAL"
-                    )
+                # Génération du signal avec gestion d'erreur spécifique
+                try:
+                    signal = await self.strategy.generate_signal(symbol, market_data, tech_analysis)
+                    self.logger.info(f"Génération de signal pour {symbol}: {'Succès' if signal else 'Aucun signal'}")
+               
+                    if signal:
+                        self.logger.warning(
+                            f"TRAITEMENT DU SIGNAL: {symbol}, {signal.get('action')}, force={signal.get('strength')}"
+                        )
+                        # Incrémentation du compteur de signaux générés
+                        self.metrics["market_analysis"]["signals_generated"] += 1
+                        # Traitement du signal avec gestion d'erreur
+                        try:
+                            result = await self._process_trading_signal(signal)
+                            self.logger.warning(
+                                f"RÉSULTAT TRAITEMENT: {symbol}, success={result}"
+                            )
+                        except Exception as process_error:
+                            self.logger.error(f"Erreur traitement signal {symbol}: {process_error}")
+                            import traceback
+                            self.logger.error(traceback.format_exc())
+                    else:
+                        # Signal non généré par la stratégie
+                        current_price = market_data["close"].iloc[-1] if not market_data.empty else None
+                        indicators = {
+                            "rsi": tech_analysis.get("rsi", "N/A"),
+                            "macd": tech_analysis.get("macd", "N/A"),
+                            "volatility": tech_analysis.get("volatility", "N/A"),
+                        }
+                        self.logger.info(f"Aucun signal généré pour {symbol}")
+                        self.log_signal_rejection(
+                            symbol, current_price, indicators, "STRATEGY_NO_SIGNAL"
+                        )
+                except Exception as signal_error:
+                    self.logger.error(f"Erreur génération signal pour {symbol}: {signal_error}")
+                    import traceback
+                    self.logger.error(traceback.format_exc())
+            except Exception as analysis_error:
+                self.logger.error(f"Erreur lors de l'analyse technique pour {symbol}: {analysis_error}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                return
 
             # Rate limiting
             now = datetime.now()
@@ -353,14 +380,13 @@ class TradingBot:
 
             # Reset du circuit breaker en cas de succès
             self._circuit_breaker["consecutive_errors"] = 0
-            self._circuit_breaker["current_delay"] = self._circuit_breaker[
-                "initial_delay"
-            ]
+            self._circuit_breaker["current_delay"] = self._circuit_breaker["initial_delay"]
 
         except Exception as e:
             # Log critique en cas d'erreur majeure
-            if self._should_log("critical"):
-                self.logger.error(f"Erreur critique analyse marché {symbol}: {str(e)}")
+            self.logger.error(f"Erreur critique analyse marché {symbol}: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 
             # Gestion du circuit breaker
             self._circuit_breaker["consecutive_errors"] += 1

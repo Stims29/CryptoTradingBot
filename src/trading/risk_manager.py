@@ -15,62 +15,62 @@ class RiskManager:
 
         # Configuration par catégorie de marché ajustée pour scalping 
         self.market_configs = {
-                'MAJOR': {
-                    'allocation_max': 0.1,      # Réduit à 10% de l'allocation totale
-                    'position_max': 0.01,       # 1% du capital maximum par position
-                    'stop_loss': 0.001,         # 0.1% de stop-loss (ultra-serré)
-                    'take_profit': 0.003,       # 0.3% de take-profit
-                    'trailing_stop': 0.0005,    # 0.05% trailing stop
-                    'partial_tp': [
-                        {'level': 0.001, 'size': 0.5},  # 50% à 0.1%
-                        {'level': 0.002, 'size': 0.5}   # 50% à 0.2%
-                    ]
-                },
-                'ALTCOINS': {
-                    'allocation_max': 0.1,      # Réduit à 10%
-                    'position_max': 0.01,       # 1% du capital maximum
-                    'stop_loss': 0.001,         # 0.1%
-                    'take_profit': 0.003,       # 0.3%
-                    'trailing_stop': 0.0005,    # 0.05%
-                    'partial_tp': [
-                        {'level': 0.001, 'size': 0.5},
-                        {'level': 0.002, 'size': 0.5}
-                    ]
-                },
-                'DEFI': {
-                    'allocation_max': 0.05,     # Réduit à 5%
-                    'position_max': 0.01,       # 1% maximum
-                    'stop_loss': 0.001,         # 0.1%
-                    'take_profit': 0.003,       # 0.3%
-                    'trailing_stop': 0.0005,    # 0.05%
-                    'partial_tp': [
-                        {'level': 0.001, 'size': 0.5},
-                        {'level': 0.002, 'size': 0.5}
-                    ]
-                },
-                'NFT_METAVERSE': {
-                    'allocation_max': 0.05,     # Réduit à 5%
-                    'position_max': 0.01,       # 1% maximum
-                    'stop_loss': 0.001,         # 0.1%
-                    'take_profit': 0.003,       # 0.3%
-                    'trailing_stop': 0.0005,    # 0.05%
-                    'partial_tp': [
-                        {'level': 0.001, 'size': 0.5},
-                        {'level': 0.002, 'size': 0.5}
-                    ]
-                },
-                'BTC_PAIRS': {
-                    'allocation_max': 0.05,     # Réduit à 5%
-                    'position_max': 0.01,       # 1% maximum
-                    'stop_loss': 0.001,         # 0.1%
-                    'take_profit': 0.003,       # 0.3%
-                    'trailing_stop': 0.0005,    # 0.05%
-                    'partial_tp': [
-                        {'level': 0.001, 'size': 0.5},
-                        {'level': 0.002, 'size': 0.5}
-                    ]
-                }
+            'MAJOR': {
+                'allocation_max': 0.15,    # 15% inchangé
+                'position_max': 0.05,      # 5% inchangé
+                'stop_loss': 0.002,        # Modifié à 0.2%
+                'take_profit': 0.004,      # Modifié à 0.4%
+                'trailing_stop': 0.001,    # 0.1% inchangé
+                'partial_tp': [            # Sorties partielles
+                    {'level': 0.002, 'size': 0.5},  # 50% à 0.2%
+                    {'level': 0.004, 'size': 0.5}   # 50% à 0.4%
+                ]
+            },
+            'ALTCOINS': {
+                'allocation_max': 0.15,    # Maintenu
+                'position_max': 0.05,      # Maintenu
+                'stop_loss': 0.002,        # Modifié à 0.2%
+                'take_profit': 0.004,      # Modifié à 0.4%
+                'trailing_stop': 0.001,    # 0.1%
+                'partial_tp': [
+                    {'level': 0.002, 'size': 0.5},
+                    {'level': 0.004, 'size': 0.5}
+                ]
+            },
+            'DEFI': {
+                'allocation_max': 0.1,
+                'position_max': 0.05,
+                'stop_loss': 0.002,        # Modifié à 0.2%
+                'take_profit': 0.004,      # Modifié à 0.4%
+                'trailing_stop': 0.001,          # 0.1% trailing stop
+                'partial_tp': [                  # Sorties partielles
+                    {'level': 0.002, 'size': 0.5},  # 50% à 0.2%
+                    {'level': 0.004, 'size': 0.5}   # 50% à 0.4%
+                ]
+            },
+            'NFT_METAVERSE': {
+                'allocation_max': 0.1,
+                'position_max': 0.05,
+                'stop_loss': 0.002,        # Modifié à 0.2%
+                'take_profit': 0.004,      # Modifié à 0.4%
+                'trailing_stop': 0.001,          # 0.1% trailing stop
+                'partial_tp': [                  # Sorties partielles
+                    {'level': 0.002, 'size': 0.5},  # 50% à 0.2%
+                    {'level': 0.004, 'size': 0.5}   # 50% à 0.4%
+                ]
+            },
+            'BTC_PAIRS': {
+                'allocation_max': 0.05,
+                'position_max': 0.03,
+                'stop_loss': 0.002,        # Modifié à 0.2%
+                'take_profit': 0.004,      # Modifié à 0.4%
+                'trailing_stop': 0.001,          # 0.1% trailing stop
+                'partial_tp': [                  # Sorties partielles
+                    {'level': 0.002, 'size': 0.5},  # 50% à 0.2%
+                    {'level': 0.004, 'size': 0.5}   # 50% à 0.4%
+                ]
             }
+        }
 
         # Configuration générale optimisée pour scalping
         self.config = {
