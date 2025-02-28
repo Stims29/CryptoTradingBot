@@ -209,7 +209,10 @@ class TradingBot:
                 raise ValueError("Aucun symbole configuré")
 
             self._running = True
-            self.logger.info("Démarrage du bot...")
+            self._emergency_brake_activated = False
+            self._signal_suspension_until = None
+            self.risk_limits["emergency_mode"] = False
+            self.logger.info("Test 3B: Frein d'urgence réinitialisé")
 
             # Log explicite pour vérification
             self.logger.info(
@@ -400,6 +403,9 @@ class TradingBot:
     async def _process_trading_signal(self, signal: Dict[str, Any]):
         """Traite un signal de trading."""
         try:
+            # Log de l'état du frein d'urgence
+            self.logger.info(f"État frein d'urgence: _emergency_brake_activated={getattr(self, '_emergency_brake_activated', False)}, _signal_suspension_until={getattr(self, '_signal_suspension_until', None)}")
+            
             # Vérifier le frein d'urgence en priorité
             if hasattr(self, '_check_global_emergency_brake') and self._check_global_emergency_brake():
                 self.log_signal_rejection(signal.get('symbol', 'unknown'), 
@@ -431,6 +437,23 @@ class TradingBot:
                 self.logger.error(f"[TRAITEMENT] Signal invalide: données manquantes")
                 self.log_signal_rejection(symbol, current_price, indicators, "INVALID_SIGNAL")
                 return False
+            
+            # Validation des signaux dupliqués avec fenêtre temporelle
+            signal_key = f"{symbol}_{signal['action']}"
+            current_time = datetime.now()
+
+            if signal_key in self._processed_signals:
+                last_time = self._processed_signals[signal_key]
+                seconds_elapsed = (current_time - last_time).total_seconds()
+    
+                # Autoriser le même signal après 10 secondes
+                if seconds_elapsed < 10:
+                    self.logger.info(f"[TRAITEMENT] Signal similaire pour {symbol} ignoré temporairement (10s)")
+                    self.log_signal_rejection(symbol, current_price, indicators, "DUPLICATE_SIGNAL")
+                    return False
+
+            # Mettre à jour le timestamp du dernier signal
+            self._processed_signals[signal_key] = current_time
 
             # Vérification de la tendance macro si disponible
             if hasattr(self, 'market_data') and hasattr(self.market_data, 'get_market_trend'):
@@ -635,6 +658,11 @@ class TradingBot:
                             )
                             self._update_drawdown()
 
+                            self.logger.info(f"Position fermée: {position['symbol']}, PnL: {pnl:.4f}€")
+                            # Métriques détaillées pour le debug
+                            self.logger.info(f"Métriques avant mise à jour - Capital: {self.current_capital:.4f}€, PnL total: {self.metrics['performance']['total_pnl']:.4f}€")
+    
+
                             # Mise à jour des métriques
                             if pnl > 0:
                                 self.metrics["trades"]["winners"] += 1
@@ -718,39 +746,48 @@ class TradingBot:
     def _check_global_emergency_brake(self):
         """Vérifie si le frein d'urgence global doit être activé."""
         try:
-            # Si le capital est réduit de plus de 10%, arrêter tout trading
-            capital_loss_pct = (self.initial_capital - self.current_capital) / self.initial_capital
-        
-            if capital_loss_pct > 0.1:  # 10% de perte
+            # Pour le Test 3B: Limiter à 3 trades maximum
+            if hasattr(self, 'metrics') and self.metrics['trades']['total'] >= 3:
                 if not hasattr(self, '_emergency_brake_activated') or not self._emergency_brake_activated:
-                    self.logger.critical(f"FREIN D'URGENCE ACTIVÉ: Capital réduit de {capital_loss_pct*100:.1f}% - ARRÊT DE TOUT TRADING")
+                    self.logger.critical("LIMITE DE TEST ATTEINTE: 3 trades maximum pour Test 3B")
                     self._emergency_brake_activated = True
-                
-                    # Fermer toutes les positions ouvertes
-                    if hasattr(self.position_manager, "close_all_positions"):
-                        asyncio.create_task(self.position_manager.close_all_positions("emergency_brake"))
-                    
-                    # Suspendre la génération de signaux pendant 1 heure
-                    self._signal_suspension_until = datetime.now() + timedelta(hours=1)
-                
                 return True
             
+            # Vérification standard désactivée pour le Test 3B
             return False
+        
+            # Code original commenté
+            # capital_loss_pct = (self.initial_capital - self.current_capital) / self.initial_capital
+            # if capital_loss_pct > 0.1:  # 10% de perte
+            #    if not hasattr(self, '_emergency_brake_activated') or not self._emergency_brake_activated:
+            #        self.logger.critical(f"FREIN D'URGENCE ACTIVÉ: Capital réduit de {capital_loss_pct*100:.1f}% - ARRÊT DE TOUT TRADING")
+            #        self._emergency_brake_activated = True
+            #        
+            #        # Fermer toutes les positions ouvertes
+            #        if hasattr(self.position_manager, "close_all_positions"):
+            #            asyncio.create_task(self.position_manager.close_all_positions("emergency_brake"))
+            #        
+            #        # Suspendre la génération de signaux pendant 1 heure
+            #        self._signal_suspension_until = datetime.now() + timedelta(hours=1)
+            #        
+            #    return True
+            # return False
         
         except Exception as e:
             self.logger.error(f"Erreur vérification frein d'urgence: {e}")
-            return True  # En cas de doute, activer le frein
+            return False  # En cas d'erreur, ne pas activer le frein d'urgence pour le Test 3B
         
     def _critical_stop(self):
         """Arrête tout trading après X pertes consécutives"""
-        if len(self.position_manager.position_history) >= 3:
-            # Si les 3 dernières positions sont perdantes
-            last_positions = self.position_manager.position_history[-3:]
-            if all(p['realized_pnl'] < 0 for p in last_positions):
-                self.logger.critical("ARRÊT CRITIQUE: 3 pertes consécutives")
-                self._emergency_brake_activated = True
-                self._signal_suspension_until = datetime.now() + timedelta(hours=1)
-                return True
+        # Pour le Test 3A: désactivé temporairement
+        self.logger.debug("Test 3A: Frein d'urgence temporairement désactivé")
+    
+        # Limiter à 3 trades maximum pour ce test
+        if hasattr(self, 'metrics') and self.metrics['trades']['total'] >= 3:
+            self.logger.critical("LIMITE DE TEST ATTEINTE: 3 trades maximum pour Test 3A")
+            self._emergency_brake_activated = True
+            return True
+        
         return False
 
     def _cleanup_processed_signals(self):

@@ -468,13 +468,13 @@ class HybridStrategy:
             return {}
 
     def _validate_signal(self, score: float, tech_analysis: Dict, indicators: Dict) -> Tuple[bool, str]:
+        """Valide un signal selon le score et les critères définis."""
         try:
-            # Augmenter significativement le seuil de validation
-            if abs(score) > 0.20:  # Revenir à 0.20 au lieu de 0.25
+            # Validation du score - ajusté pour Test 3A
+            if abs(score) > 0.15:  # Réduit de 0.20 à 0.15
                 strategy_type = "MEAN_REVERSION" if score < 0 else "MOMENTUM/BREAKOUT"
                 return True, f"Signal validé: {strategy_type} (score: {score:.4f})"
         
-            # Limiter la génération de signaux faibles
             return False, "Score trop faible"
     
         except Exception as e:

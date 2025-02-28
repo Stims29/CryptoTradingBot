@@ -358,6 +358,11 @@ class PositionManager:
                 pnl = (exit_price - position['entry_price']) * position['size']
             else:  # 'sell'
                 pnl = (position['entry_price'] - exit_price) * position['size']
+
+            self.logger.info(f"[TEST 3D] Fermeture position {symbol} - Prix entrée: {position['entry_price']}, Prix sortie: {exit_price}, PnL calculé: {pnl:.6f}")
+        
+            # Avant de retourner le PnL
+            self.logger.info(f"[TEST 3D] PnL réalisé retourné: {pnl:.6f}")
         
             # Protection contre les PnL irréalistes
             if hasattr(self, 'initial_capital') and self.initial_capital > 0:

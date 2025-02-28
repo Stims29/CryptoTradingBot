@@ -409,8 +409,8 @@ async def main():
     """Point d'entrée principal avec gestion robuste des erreurs."""
     try:
         # Configuration des paramètres
-        duration_minutes = 15  
-        initial_capital = 1.0 # Limiter à 1€ seulement
+        duration_minutes = 30  
+        initial_capital = 5.0 # Captial initial en euros
         
         # Exécution test
         test = ScalpingTest(duration_minutes, initial_capital)

@@ -24,5 +24,5 @@ logs/
 run_simulation_jan2025.py
 metrics_*.json
 metrics_*.csv
-result_*.json
+results_*.json
 *.log
