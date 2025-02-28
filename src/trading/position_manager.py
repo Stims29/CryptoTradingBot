@@ -36,7 +36,7 @@ class PositionManager:
         # Configuration par type de marché
         self.market_configs = {
             'MAJOR': {
-                'stop_loss': 0.001,      # 0.1%
+                'stop_loss': 0.002,      # 0.2%
                 'take_profit': 0.003,    # 0.3%
                 'trailing_stop': 0.0005, # 0.05%
                 'position_max': 0.01     # 1% du capital seulement
@@ -73,7 +73,7 @@ class PositionManager:
             'max_daily_loss': 0.20,       # Augmenté de 0.15 à 0.20
             'max_exposure': 0.15,         # Réduit de 0.25 à 0.15 (15% exposition maximale)
             'max_positions': 3,           # Réduit de 5 à 3 positions simultanées max
-            'position_timeout': 180,      # Réduit de 300 à 180 (3 minutes max par position)
+            'position_timeout': 300,      # Réduit de 300 à 180 (3 minutes max par position)
             'emergency_close': False,     # # Renommé de emergency_close à emergency_mode
             'recovery_threshold': 0.10    # Seuil de récupération pour sortie du mode urgence
         }
@@ -359,6 +359,10 @@ class PositionManager:
             else:  # 'sell'
                 pnl = (position['entry_price'] - exit_price) * position['size']
 
+            # Traçage détaillé des positions fermées
+            self.logger.info(f"FERMETURE DÉTAILLÉE: {symbol} - Entrée: {position['entry_price']}, Sortie: {exit_price}, Côté: {position['side']}, Taille: {position['size']}, PnL: {pnl:.6f}€, Raison: {reason}")
+            
+            # Log détaillé
             self.logger.info(f"[TEST 3D] Fermeture position {symbol} - Prix entrée: {position['entry_price']}, Prix sortie: {exit_price}, PnL calculé: {pnl:.6f}")
         
             # Avant de retourner le PnL
@@ -516,6 +520,10 @@ class PositionManager:
     def get_metrics(self) -> Dict:
         """Retourne toutes les métriques de performance."""
         return self.metrics
+    
+    def get_total_pnl(self) -> float:
+        """Retourne le PnL total (réalisé + non réalisé)."""
+        return self.metrics['total_pnl']
 
     def reset_metrics(self):
         """Réinitialise les métriques."""
@@ -549,22 +557,26 @@ class PositionManager:
         self.logger.info("Métriques réinitialisées")
 
     def _update_metrics(self):
-        """Met à jour les métriques basées sur les positions actuelles."""
+        """Met à jour les métriques de trading."""
         try:
-            # Calcul PnL non réalisé
-            unrealized_pnl = sum(p['unrealized_pnl'] for p in self.positions.values())
-            self.metrics['unrealized_pnl'] = unrealized_pnl
-            
-            # Total PnL
-            self.metrics['total_pnl'] = self.metrics['realized_pnl'] + unrealized_pnl
-            
-            # Win rate (uniquement sur positions fermées)
-            total_closed = self.position_stats['win_count'] + self.position_stats['loss_count']
-            if total_closed > 0:
-                self.metrics['win_rate'] = self.position_stats['win_count'] / total_closed
-                
+            # Synchronisation explicite du PnL avec le PositionManager
+            if hasattr(self, "position_manager") and self.position_manager:
+                self.metrics["performance"]["total_pnl"] = self.position_manager.get_total_pnl()
+        
+            # Calcul win rate
+            total_trades = (
+                self.metrics["trades"]["winners"] + self.metrics["trades"]["losers"]
+            )
+            if total_trades > 0:
+                self.metrics["performance"]["win_rate"] = (
+                    self.metrics["trades"]["winners"] / total_trades * 100
+                )
+
+            # Mise à jour drawdown
+            self._update_drawdown()
+
         except Exception as e:
-            self.logger.error(f"Erreur mise à jour métriques: {str(e)}")
+            self.logger.error(f"Erreur lors de la mise à jour des métriques: {str(e)}")
 
     def export_history(self, filename: str) -> bool:
         """Exporte l'historique des positions en JSON."""
