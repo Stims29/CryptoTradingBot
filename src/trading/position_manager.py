@@ -73,7 +73,7 @@ class PositionManager:
             'max_daily_loss': 0.20,       # Augmenté de 0.15 à 0.20
             'max_exposure': 0.15,         # Réduit de 0.25 à 0.15 (15% exposition maximale)
             'max_positions': 3,           # Réduit de 5 à 3 positions simultanées max
-            'position_timeout': 60,      # Réduit à 1 minute pour test
+            'position_timeout': 30,      # Réduit à 30 sec. pour test
             'emergency_close': False,     # # Renommé de emergency_close à emergency_mode
             'recovery_threshold': 0.10    # Seuil de récupération pour sortie du mode urgence
         }
@@ -110,6 +110,7 @@ class PositionManager:
             bool: True si la position a été ouverte avec succès, False sinon
         """
         try:
+            self.logger.info(f"[DIAGNOSTIC] Demande ouverture position: {symbol}, {side}, {size}, {entry_price}, {market_type}")
             # Vérification des paramètres
             if not all([symbol, side, size, entry_price, market_type]):
                 self.logger.error(f"Paramètres invalides pour open_position: {symbol}, {side}, {size}, {entry_price}, {market_type}")
@@ -359,6 +360,9 @@ class PositionManager:
             else:  # 'sell'
                 pnl = (position['entry_price'] - exit_price) * position['size']
 
+            self.logger.info(f"[DIAGNOSTIC] PnL réalisé: {symbol} - {pnl:.6f}€ [avant mise à jour des métriques]")
+            self.logger.info(f"[DIAGNOSTIC] AVANT fermeture - metrics['total_pnl']: {self.metrics['total_pnl']:.6f}€")
+
             # Traçage détaillé des positions fermées
             self.logger.info(f"FERMETURE DÉTAILLÉE: {symbol} - Entrée: {position['entry_price']}, Sortie: {exit_price}, Côté: {position['side']}, Taille: {position['size']}, PnL: {pnl:.6f}€, Raison: {reason}")
             
@@ -415,6 +419,9 @@ class PositionManager:
             # Mettre à jour métriques
             self.metrics['realized_pnl'] += pnl
             self.metrics['total_pnl'] += pnl
+
+            # Après l'update des métriques
+            self.logger.info(f"[DIAGNOSTIC] APRÈS fermeture - metrics['total_pnl']: {self.metrics['total_pnl']:.6f}€")
         
             # Ajouter à l'historique
             self.position_history.append(position.copy())

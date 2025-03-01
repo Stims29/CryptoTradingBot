@@ -410,7 +410,7 @@ async def main():
     try:
         # Configuration des paramètres
         duration_minutes = 30  
-        initial_capital = 5.0 # Captial initial en euros
+        initial_capital = 10.0 # Captial initial en euros
         
         # Exécution test
         test = ScalpingTest(duration_minutes, initial_capital)

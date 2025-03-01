@@ -18,8 +18,8 @@ class RiskManager:
             'MAJOR': {
                 'allocation_max': 0.15,    # 15% inchangé
                 'position_max': 0.05,      # 5% inchangé
-                'stop_loss': 0.002,        # Modifié à 0.2%
-                'take_profit': 0.004,      # Modifié à 0.4%
+                'stop_loss': 0.001,        # Modifié à 0.1%
+                'take_profit': 0.002,      # Modifié à 0.2%
                 'trailing_stop': 0.001,    # 0.1% inchangé
                 'partial_tp': [            # Sorties partielles
                     {'level': 0.002, 'size': 0.5},  # 50% à 0.2%

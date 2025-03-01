@@ -115,7 +115,7 @@ class TradingBot:
             "max_drawdown": 0.20,         # Augmenter de 0.15 à 0.20
             "max_daily_loss": 0.15,       # Augmenter de 0.10 à 0.15
             "max_exposure": 0.25,  # 25% exposition maximale
-            "max_positions": 5,  # 5 positions simultanées max
+            "max_positions": 3,  # 3 positions simultanées max
             "emergency_mode": True,       # Maintenir actif pour la sécurité
             'recovery_threshold': 0.05    # Nouveau paramètre pour sortie auto du mode urgence
         }
@@ -526,6 +526,7 @@ class TradingBot:
        
                 if order:
                     self.logger.info(f"[TRAITEMENT] Ordre placé avec succès: {order}")
+                    self.logger.info(f"[DIAGNOSTIC] Ordre placé pour {symbol}: {order}")
             
                     # Récupération de la catégorie de marché
                     market_type = self.risk_manager.get_market_category(symbol)
@@ -563,6 +564,7 @@ class TradingBot:
                     self.logger.error(f"[TRAITEMENT] Échec placement ordre: {symbol}")
                     self.log_signal_rejection(symbol, current_price, indicators, "ORDER_PLACEMENT_FAILED")
                     return False
+                
             else:
                 self.logger.info(f"[TRAITEMENT] Signal rejeté par risk manager: {check_message}")
                 self.log_signal_rejection(symbol, current_price, indicators, f"RISK_MANAGER_REJECTION: {check_message}")
@@ -728,17 +730,17 @@ class TradingBot:
                         self.logger.info(f"Synchronisation PnL: {self.metrics['performance']['total_pnl']:.4f}€ -> {pm_total_pnl:.4f}€")
                         self.metrics["performance"]["total_pnl"] = pm_total_pnl
             
-                # Récupération d'autres métriques importantes du position_manager
-                if hasattr(self.position_manager, "get_metrics"):
-                    pm_metrics = self.position_manager.get_metrics()
-                    if pm_metrics:
-                        # Synchronisation des métriques de win_rate
-                        if 'win_rate' in pm_metrics and pm_metrics['win_rate'] > 0:
-                            self.metrics["performance"]["win_rate"] = pm_metrics['win_rate'] * 100
+                    # Récupération d'autres métriques importantes du position_manager
+                    if hasattr(self.position_manager, "get_metrics"):
+                        pm_metrics = self.position_manager.get_metrics()
+                        if pm_metrics:
+                            # Synchronisation des métriques de win_rate
+                            if 'win_rate' in pm_metrics and pm_metrics['win_rate'] > 0:
+                                self.metrics["performance"]["win_rate"] = pm_metrics['win_rate'] * 100
                     
-                        # Synchronisation des métriques de drawdown
-                        if 'max_drawdown' in pm_metrics:
-                            self.metrics["performance"]["max_drawdown"] = pm_metrics['max_drawdown']
+                            # Synchronisation des métriques de drawdown
+                            if 'max_drawdown' in pm_metrics:
+                                self.metrics["performance"]["max_drawdown"] = pm_metrics['max_drawdown']
         
             # Calcul win rate si non synchronisé depuis position_manager
             if self.metrics["performance"]["win_rate"] == 0:
@@ -761,7 +763,7 @@ class TradingBot:
             if self._metrics_log_counter % 100 == 0:
                 self.logger.info(
                     f"Métriques actuelles - Capital: {self.current_capital:.2f}€, "
-                    f"PnL: {self.metrics['performance']['total_pnl']:.2f}€, "
+                    "PnL: {self.metrics['performance']['total_pnl']:.2f}€, "
                     f"Win rate: {self.metrics['performance']['win_rate']:.1f}%, "
                     f"Drawdown: {self.metrics['performance']['current_drawdown']*100:.1f}%"
                 )
@@ -770,7 +772,7 @@ class TradingBot:
             self.logger.error(f"Erreur mise à jour métriques: {str(e)}")
             import traceback
             self.logger.error(traceback.format_exc())
-
+    
     def _update_drawdown(self):
         """Met à jour les métriques de drawdown."""
         try:
