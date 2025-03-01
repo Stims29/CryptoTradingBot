@@ -718,6 +718,45 @@ class TradingBot:
             self.logger.error(f"Erreur mise à jour positions: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
+    
+    def _update_drawdown(self):
+        """Met à jour les métriques de drawdown."""
+        try:
+            if self.peak_capital > 0:
+                current_drawdown = (self.peak_capital - self.current_capital) / self.peak_capital if self.current_capital < self.peak_capital else 0
+                self.metrics['performance']['current_drawdown'] = current_drawdown
+                self.metrics['performance']['max_drawdown'] = max(
+                    current_drawdown,
+                    self.metrics['performance']['max_drawdown']
+                )
+        except Exception as e:
+            self.logger.error(f"Erreur calcul drawdown: {str(e)}")
+
+    def _check_emergency_mode(self):
+        """Active le mode urgence en cas de pertes importantes."""
+        try:
+            # Variables pour éviter les appels redondants
+            current_state = self.risk_limits.get('emergency_mode', False)
+        
+            # Vérifier si on a atteint la limite de perte journalière
+            if (self.metrics["performance"]["total_pnl"] <= -self.risk_limits["max_daily_loss"] * self.initial_capital):
+                if not current_state:
+                    self.risk_limits["emergency_mode"] = True
+                    self.logger.warning(f"MODE URGENCE ACTIVÉ - Perte journalière: {self.metrics['performance']['total_pnl']:.2f}€")
+
+            # Vérifier si on a atteint le drawdown maximum
+            elif (self.metrics["performance"]["current_drawdown"] >= self.risk_limits["max_drawdown"]):
+                if not current_state:
+                    self.risk_limits["emergency_mode"] = True
+                    self.logger.warning(f"MODE URGENCE ACTIVÉ - Drawdown: {self.metrics['performance']['current_drawdown']*100:.2f}%")
+
+            # Ajout : Vérification de sortie du mode urgence (avec hystérésis)
+            elif current_state and self.metrics['performance']['current_drawdown'] < self.risk_limits['recovery_threshold'] * 0.8:  # 80% du seuil pour éviter les oscillations
+                self.risk_limits['emergency_mode'] = False
+                self.logger.warning(f"MODE URGENCE DÉSACTIVÉ - Drawdown réduit à {self.metrics['performance']['current_drawdown']*100:.2f}%")
+    
+        except Exception as e:
+            self.logger.error(f"Erreur vérification mode urgence: {e}")
 
     def _update_metrics(self):
         """Met à jour les métriques de trading."""
@@ -772,45 +811,6 @@ class TradingBot:
             self.logger.error(f"Erreur mise à jour métriques: {str(e)}")
             import traceback
             self.logger.error(traceback.format_exc())
-    
-    def _update_drawdown(self):
-        """Met à jour les métriques de drawdown."""
-        try:
-            if self.peak_capital > 0:
-                current_drawdown = (self.peak_capital - self.current_capital) / self.peak_capital if self.current_capital < self.peak_capital else 0
-                self.metrics['performance']['current_drawdown'] = current_drawdown
-                self.metrics['performance']['max_drawdown'] = max(
-                    current_drawdown,
-                    self.metrics['performance']['max_drawdown']
-                )
-        except Exception as e:
-            self.logger.error(f"Erreur calcul drawdown: {str(e)}")
-
-    def _check_emergency_mode(self):
-        """Active le mode urgence en cas de pertes importantes."""
-        try:
-            # Variables pour éviter les appels redondants
-            current_state = self.risk_limits.get('emergency_mode', False)
-        
-            # Vérifier si on a atteint la limite de perte journalière
-            if (self.metrics["performance"]["total_pnl"] <= -self.risk_limits["max_daily_loss"] * self.initial_capital):
-                if not current_state:
-                    self.risk_limits["emergency_mode"] = True
-                    self.logger.warning(f"MODE URGENCE ACTIVÉ - Perte journalière: {self.metrics['performance']['total_pnl']:.2f}€")
-
-            # Vérifier si on a atteint le drawdown maximum
-            elif (self.metrics["performance"]["current_drawdown"] >= self.risk_limits["max_drawdown"]):
-                if not current_state:
-                    self.risk_limits["emergency_mode"] = True
-                    self.logger.warning(f"MODE URGENCE ACTIVÉ - Drawdown: {self.metrics['performance']['current_drawdown']*100:.2f}%")
-
-            # Ajout : Vérification de sortie du mode urgence (avec hystérésis)
-            elif current_state and self.metrics['performance']['current_drawdown'] < self.risk_limits['recovery_threshold'] * 0.8:  # 80% du seuil pour éviter les oscillations
-                self.risk_limits['emergency_mode'] = False
-                self.logger.warning(f"MODE URGENCE DÉSACTIVÉ - Drawdown réduit à {self.metrics['performance']['current_drawdown']*100:.2f}%")
-    
-        except Exception as e:
-            self.logger.error(f"Erreur vérification mode urgence: {e}")
 
     def _check_global_emergency_brake(self):
         """Vérifie si le frein d'urgence global doit être activé."""
