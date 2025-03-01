@@ -73,7 +73,7 @@ class PositionManager:
             'max_daily_loss': 0.20,       # Augmenté de 0.15 à 0.20
             'max_exposure': 0.15,         # Réduit de 0.25 à 0.15 (15% exposition maximale)
             'max_positions': 3,           # Réduit de 5 à 3 positions simultanées max
-            'position_timeout': 300,      # Réduit de 300 à 180 (3 minutes max par position)
+            'position_timeout': 60,      # Réduit à 1 minute pour test
             'emergency_close': False,     # # Renommé de emergency_close à emergency_mode
             'recovery_threshold': 0.10    # Seuil de récupération pour sortie du mode urgence
         }
@@ -447,6 +447,10 @@ class PositionManager:
     def get_position(self, symbol: str) -> Optional[Dict]:
         """Retourne les détails d'une position spécifique."""
         return self.positions.get(symbol)
+    
+    def get_total_pnl(self) -> float:
+        """Retourne le PnL total (réalisé + non réalisé)."""
+        return self.metrics['total_pnl']
 
     def get_all_positions(self) -> List[Dict]:
         """Retourne toutes les positions actives."""

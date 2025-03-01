@@ -720,25 +720,56 @@ class TradingBot:
     def _update_metrics(self):
         """Met à jour les métriques de trading."""
         try:
-            # Calcul win rate
-            total_trades = (
-                self.metrics["trades"]["winners"] + self.metrics["trades"]["losers"]
-            )
-            if total_trades > 0:
-                self.metrics["performance"]["win_rate"] = (
-                    self.metrics["trades"]["winners"] / total_trades * 100
+            # Synchronisation explicite du PnL avec le PositionManager
+            if hasattr(self, "position_manager") and self.position_manager:
+                if hasattr(self.position_manager, "get_total_pnl"):
+                    pm_total_pnl = self.position_manager.get_total_pnl()
+                    if pm_total_pnl != self.metrics["performance"]["total_pnl"]:
+                        self.logger.info(f"Synchronisation PnL: {self.metrics['performance']['total_pnl']:.4f}€ -> {pm_total_pnl:.4f}€")
+                        self.metrics["performance"]["total_pnl"] = pm_total_pnl
+            
+                # Récupération d'autres métriques importantes du position_manager
+                if hasattr(self.position_manager, "get_metrics"):
+                    pm_metrics = self.position_manager.get_metrics()
+                    if pm_metrics:
+                        # Synchronisation des métriques de win_rate
+                        if 'win_rate' in pm_metrics and pm_metrics['win_rate'] > 0:
+                            self.metrics["performance"]["win_rate"] = pm_metrics['win_rate'] * 100
+                    
+                        # Synchronisation des métriques de drawdown
+                        if 'max_drawdown' in pm_metrics:
+                            self.metrics["performance"]["max_drawdown"] = pm_metrics['max_drawdown']
+        
+            # Calcul win rate si non synchronisé depuis position_manager
+            if self.metrics["performance"]["win_rate"] == 0:
+                total_trades = (
+                    self.metrics["trades"]["winners"] + self.metrics["trades"]["losers"]
                 )
+                if total_trades > 0:
+                    self.metrics["performance"]["win_rate"] = (
+                        self.metrics["trades"]["winners"] / total_trades * 100
+                    )
 
             # Mise à jour drawdown
             self._update_drawdown()
-
-            # Mise à jour du PnL total
-            if hasattr(self.position_manager, "get_metrics"):
-                pm_metrics = self.position_manager.get_metrics()
-                self.metrics["performance"]["total_pnl"] = pm_metrics.get("total_pnl", 0.0)
+        
+            # Log périodique des métriques principales (toutes les 100 mises à jour)
+            if not hasattr(self, '_metrics_log_counter'):
+                self._metrics_log_counter = 0
+        
+            self._metrics_log_counter += 1
+            if self._metrics_log_counter % 100 == 0:
+                self.logger.info(
+                    f"Métriques actuelles - Capital: {self.current_capital:.2f}€, "
+                    f"PnL: {self.metrics['performance']['total_pnl']:.2f}€, "
+                    f"Win rate: {self.metrics['performance']['win_rate']:.1f}%, "
+                    f"Drawdown: {self.metrics['performance']['current_drawdown']*100:.1f}%"
+                )
 
         except Exception as e:
-            self.logger.error(f"Erreur lors de la mise à jour des métriques: {str(e)}")
+            self.logger.error(f"Erreur mise à jour métriques: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 
     def _update_drawdown(self):
         """Met à jour les métriques de drawdown."""

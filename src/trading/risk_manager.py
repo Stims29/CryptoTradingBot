@@ -74,9 +74,9 @@ class RiskManager:
 
         # Configuration générale optimisée pour scalping
         self.config = {
-            'max_positions': 2,            # Augmenté pour permettre plus de positions simultanées
-            'max_trades_per_hour': 15,     # Augmenté de 5 à 15
-            'min_trade_interval': 3,       # Réduit à 3 secondes
+            'max_positions': 3,            # Augmenté pour permettre plus de positions simultanées
+            'max_trades_per_hour': 30,     # 
+            'min_trade_interval': 1,       # Intervalles de 1 seconde
             'max_daily_loss': -0.15,       # Augmenté à 15% pour le test
             'max_drawdown': 0.1,           # Drawdown maximum à 10%
             'profit_lock': 0.001,          # Sécuriser les profits dès 0.1%
