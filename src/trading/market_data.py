@@ -160,8 +160,8 @@ class MarketDataManager:
         self.logger.info(f"Génération données {symbol}")
        
         volatility = {
-        'base': 0.005,  # 0.2% de volatilité base
-        'spike': 0.01  # 0.5% pour les spikes
+        'base': 0.02,  # Augmentation x10 (0.002 -> 0.02)
+        'spike': 0.05  # Augmentation x10 (0.005 -> 0.05)
         }
         try:
             # Récupération configuration

@@ -675,15 +675,15 @@ class TradingBot:
                             # Log avant modification du capital
                             old_capital = self.current_capital
                             old_total_pnl = self.metrics['performance']['total_pnl']
-                       
+                   
                             # Métriques détaillées AVANT la mise à jour
                             self.logger.info(f"Métriques AVANT mise à jour - Capital: {old_capital:.4f}€, PnL total: {old_total_pnl:.4f}€")
-                       
+                   
                             # Mise à jour du capital et peak_capital
                             self.current_capital += pnl
                             self.peak_capital = max(self.current_capital, self.peak_capital)
                             self._update_drawdown()
-                       
+                   
                             # Mise à jour explicite du PnL total
                             self.metrics['performance']['total_pnl'] += pnl
 
@@ -691,7 +691,7 @@ class TradingBot:
                             self.logger.info(f"Position fermée: {position['symbol']}, Entry: {position.get('entry_price', 'N/A')}, Exit: {current_price}, PnL: {pnl:.4f}€")
                             self.logger.info(f"Capital APRÈS mise à jour: {old_capital:.4f}€ -> {self.current_capital:.4f}€")
                             self.logger.info(f"Performance totale APRÈS mise à jour: {old_total_pnl:.4f}€ -> {self.metrics['performance']['total_pnl']:.4f}€")
-                       
+                   
                             # Vérification des métriques du position_manager
                             if hasattr(self.position_manager, "get_metrics"):
                                 pm_metrics = self.position_manager.get_metrics()
@@ -713,6 +713,18 @@ class TradingBot:
             # Vérification des timeouts et fermeture des positions expirées
             if hasattr(self.position_manager, "check_positions_timeout"):
                 await self.position_manager.check_positions_timeout()
+            
+            # Fermeture forcée des positions après un certain temps (test diagnostic)
+            for position in positions:
+                entry_time = position.get('entry_time')
+                current_time = datetime.now()
+                if entry_time and (current_time - datetime.fromisoformat(entry_time) if isinstance(entry_time, str) else entry_time).total_seconds() > 10:
+                    self.logger.warning(f"[FORCE] Fermeture forcée de {position['symbol']} après 10s pour test diagnostic")
+                    await self.position_manager.close_position(
+                        symbol=position['symbol'],
+                        exit_price=position.get('current_price', position['entry_price']),
+                        reason='test_forced_close'
+                    )
 
         except Exception as e:
             self.logger.error(f"Erreur mise à jour positions: {e}")

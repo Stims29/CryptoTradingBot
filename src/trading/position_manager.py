@@ -36,8 +36,8 @@ class PositionManager:
         # Configuration par type de marché
         self.market_configs = {
             'MAJOR': {
-                'stop_loss': 0.002,      # 0.2%
-                'take_profit': 0.003,    # 0.3%
+                'stop_loss': 0.0005,      # 0.05% (au lieu de 0.1%)
+                'take_profit': 0.001,     # 0.1% (au lieu de 0.3%)
                 'trailing_stop': 0.0005, # 0.05%
                 'position_max': 0.01     # 1% du capital seulement
             },
@@ -73,7 +73,7 @@ class PositionManager:
             'max_daily_loss': 0.20,       # Augmenté de 0.15 à 0.20
             'max_exposure': 0.15,         # Réduit de 0.25 à 0.15 (15% exposition maximale)
             'max_positions': 3,           # Réduit de 5 à 3 positions simultanées max
-            'position_timeout': 30,      # Réduit à 30 sec. pour test
+            'position_timeout': 15,  # Réduit de 30s à 15s
             'emergency_close': False,     # # Renommé de emergency_close à emergency_mode
             'recovery_threshold': 0.10    # Seuil de récupération pour sortie du mode urgence
         }
@@ -225,79 +225,87 @@ class PositionManager:
     async def update_position(self, position_data: Dict) -> float:
         """
         Met à jour une position existante avec le prix actuel.
-    
+
         Args:
             position_data (Dict): Données de mise à jour avec au moins 'symbol' et 'current_price'
-            
+        
         Returns:
             float: PnL réalisé si position fermée, sinon 0
         """
         try:
             symbol = position_data.get('symbol')
             current_price = position_data.get('current_price')
-        
+    
             if not symbol or not current_price:
                 self.logger.error(f"Données mise à jour position incomplètes: {position_data}")
                 return 0.0
-                
+            
             if symbol not in self.positions:
                 self.logger.warning(f"Position inexistante pour mise à jour: {symbol}")
                 return 0.0
-                
+            
             position = self.positions[symbol]
-        
+    
             # Mise à jour du prix actuel
+            old_price = position.get('current_price', position['entry_price'])
             position['current_price'] = current_price
             position['last_update'] = datetime.now()
-        
+    
             # Mise à jour des prix min/max
             position['max_price'] = max(position['max_price'], current_price)
             position['min_price'] = min(position['min_price'], current_price)
-        
+    
             # Calcul de la durée
             duration = (position['last_update'] - position['entry_time']).total_seconds()
             position['duration'] = duration
-        
+    
             # Calcul du PnL non réalisé
             if position['side'] == 'buy':
                 unrealized_pnl = (current_price - position['entry_price']) * position['size']
             else:  # 'sell'
                 unrealized_pnl = (position['entry_price'] - current_price) * position['size']
-                
+            
             position['unrealized_pnl'] = unrealized_pnl
         
-            # Stop loss d'urgence basé sur le pourcentage du capital initial
+            # Log pour debugging des prix et conditions de sortie
+            self.logger.info(f"[DEBUG] Vérification position {symbol}: Prix actuel {current_price}, SL {position['stop_loss']:.6f}, TP {position['take_profit']:.6f}")
+            self.logger.info(f"[DEBUG] Mouvement prix: {old_price:.6f} -> {current_price:.6f} ({((current_price-old_price)/old_price)*100:.4f}%)")
+            self.logger.info(f"[DEBUG] PnL non réalisé: {unrealized_pnl:.6f}€, Durée: {duration:.1f}s")
+    
+            # Stop loss d'urgence basé sur le pourcentage du capital initial (réduit pour Test 3J)
             if hasattr(self, 'initial_capital') and self.initial_capital > 0:
-                if unrealized_pnl < -0.01 * self.initial_capital:
-                    self.logger.warning(f"Stop loss d'urgence activé pour {symbol}: Perte > 1% du capital initial")
+                if unrealized_pnl < -0.005 * self.initial_capital:  # Seuil réduit à 0.5%
+                    self.logger.warning(f"Stop loss d'urgence activé pour {symbol}: Perte > 0.5% du capital initial")
                     return await self.close_position(symbol, current_price, "emergency_stop")
-        
+    
             # Ajout du trailing stop
             try:
                 market_type = position['market_type']
                 trailing_stop_pct = self.market_configs.get(market_type, {}).get('trailing_stop', 0.001)
-            
+        
                 # Mise à jour du trailing stop pour position acheteuse
                 if position['side'] == 'buy' and current_price > position['entry_price']:
                     # Calculer le nouveau stop basé sur le prix max
                     new_stop = position['max_price'] * (1 - trailing_stop_pct)
                     # Ne mettre à jour que si le nouveau stop est supérieur à l'ancien
                     if new_stop > position['stop_loss']:
+                        old_stop = position['stop_loss']
                         position['stop_loss'] = new_stop
-                        self.logger.info(f"Trailing stop mis à jour: {symbol} à {new_stop:.2f}")
-            
+                        self.logger.info(f"Trailing stop mis à jour: {symbol} {old_stop:.6f} -> {new_stop:.6f}")
+        
                 # Mise à jour du trailing stop pour position vendeuse
                 elif position['side'] == 'sell' and current_price < position['entry_price']:
                     # Calculer le nouveau stop basé sur le prix min
                     new_stop = position['min_price'] * (1 + trailing_stop_pct)
                     # Ne mettre à jour que si le nouveau stop est inférieur à l'ancien
                     if new_stop < position['stop_loss']:
+                        old_stop = position['stop_loss']
                         position['stop_loss'] = new_stop
-                        self.logger.info(f"Trailing stop mis à jour: {symbol} à {new_stop:.2f}")
+                        self.logger.info(f"Trailing stop mis à jour: {symbol} {old_stop:.6f} -> {new_stop:.6f}")
             except Exception as e:
                 self.logger.error(f"Erreur calcul trailing stop pour {symbol}: {str(e)}")
-        
-            # Vérification du timeout
+    
+            # Vérification du timeout (réduit pour Test 3J)
             try:
                 # Vérifier si la position a dépassé sa durée maximale
                 if hasattr(self, 'risk_limits') and 'position_timeout' in self.risk_limits:
@@ -307,32 +315,46 @@ class PositionManager:
                         return await self.close_position(symbol, current_price, "timeout")
             except Exception as e:
                 self.logger.error(f"Erreur vérification timeout pour {symbol}: {str(e)}")
-                    
-            # Vérification stop loss et take profit
+                
+            # Vérification stop loss et take profit avec logs détaillés
             triggered = None
             if position['side'] == 'buy':
+                # Log de comparaison exacte pour debug
+                self.logger.info(f"[DEBUG-BUY] SL Check: current_price({current_price}) <= stop_loss({position['stop_loss']}) = {current_price <= position['stop_loss']}")
+                self.logger.info(f"[DEBUG-BUY] TP Check: current_price({current_price}) >= take_profit({position['take_profit']}) = {current_price >= position['take_profit']}")
+            
                 if current_price <= position['stop_loss']:
                     triggered = 'stop_loss'
+                    self.logger.warning(f"STOP LOSS TRIGGERED: {symbol} - Price: {current_price} <= SL: {position['stop_loss']}")
                 elif current_price >= position['take_profit']:
                     triggered = 'take_profit'
+                    self.logger.warning(f"TAKE PROFIT TRIGGERED: {symbol} - Price: {current_price} >= TP: {position['take_profit']}")
             else:  # 'sell'
+                # Log de comparaison exacte pour debug
+                self.logger.info(f"[DEBUG-SELL] SL Check: current_price({current_price}) >= stop_loss({position['stop_loss']}) = {current_price >= position['stop_loss']}")
+                self.logger.info(f"[DEBUG-SELL] TP Check: current_price({current_price}) <= take_profit({position['take_profit']}) = {current_price <= position['take_profit']}")
+            
                 if current_price >= position['stop_loss']:
                     triggered = 'stop_loss'
+                    self.logger.warning(f"STOP LOSS TRIGGERED: {symbol} - Price: {current_price} >= SL: {position['stop_loss']}")
                 elif current_price <= position['take_profit']:
                     triggered = 'take_profit'
-                    
+                    self.logger.warning(f"TAKE PROFIT TRIGGERED: {symbol} - Price: {current_price} <= TP: {position['take_profit']}")
+                
             # Fermeture si stop ou take profit atteint
             if triggered:
                 self.logger.info(f"Position {symbol} {triggered} atteint. Fermeture auto à {current_price}")
                 return await self.close_position(symbol, current_price, triggered)
-                
+            
             # Mise à jour des métriques globales
             self._update_metrics()
-        
+    
             return 0.0
-                
+            
         except Exception as e:
             self.logger.error(f"Erreur mise à jour position {position_data.get('symbol', 'unknown')}: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return 0.0
 
     async def close_position(self, symbol: str, exit_price: float, reason: str = 'manual') -> float:
